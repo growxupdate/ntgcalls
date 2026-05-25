@@ -5,6 +5,7 @@ if (WIN32)
 endif ()
 
 include(ExternalProject)
+include(FetchContent)
 
 option(STATIC_BUILD "Build static libraries" ON)
 option(USE_LIBCXX   "Use libc++" ON)
@@ -40,12 +41,34 @@ include(cmake/FindFFmpeg.cmake)
 # pybind11
 if (IS_PYTHON)
     set(PYBIND11_FINDPYTHON "NEW")
-    add_subdirectory(deps/pybind11)
+    if (EXISTS "${CMAKE_SOURCE_DIR}/deps/pybind11/CMakeLists.txt")
+        add_subdirectory(deps/pybind11)
+    else ()
+        message(STATUS "deps/pybind11 is missing; fetching pybind11 during build")
+        FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11.git
+            GIT_TAG stable
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(pybind11)
+    endif ()
 endif ()
 
 # Oboe
 if (ANDROID)
-    add_subdirectory(deps/oboe)
+    if (EXISTS "${CMAKE_SOURCE_DIR}/deps/oboe/CMakeLists.txt")
+        add_subdirectory(deps/oboe)
+    else ()
+        message(STATUS "deps/oboe is missing; fetching oboe during build")
+        FetchContent_Declare(
+            oboe
+            GIT_REPOSITORY https://github.com/google/oboe.git
+            GIT_TAG 1.10.0
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(oboe)
+    endif ()
     setup_platform_flags(oboe OFF)
 endif ()
 
