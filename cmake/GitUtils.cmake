@@ -76,11 +76,14 @@ function(GitFile)
         message(FATAL_ERROR "Failed to fetch from remote origin.")
     endif ()
     if (BASE64)
+        set(_GIT_FILE_B64 "${CMAKE_BINARY_DIR}/git_file_base64.tmp")
+        file(WRITE "${_GIT_FILE_B64}" "${FILE_CONTENT}")
         execute_process(
-            COMMAND ${Python_EXECUTABLE} -c "import base64; import sys; sys.stdout.buffer.write(base64.b64decode('${FILE_CONTENT}'))"
+            COMMAND ${Python_EXECUTABLE} -c "import base64, pathlib, sys; data = pathlib.Path(sys.argv[1]).read_bytes(); sys.stdout.buffer.write(base64.b64decode(data))" "${_GIT_FILE_B64}"
             RESULT_VARIABLE GIT_RESULT_CODE
             OUTPUT_VARIABLE FILE_CONTENT
         )
+        file(REMOVE "${_GIT_FILE_B64}")
         if(NOT GIT_RESULT_CODE EQUAL 0)
             message(FATAL_ERROR "Failed to decrypt git file")
         endif ()
