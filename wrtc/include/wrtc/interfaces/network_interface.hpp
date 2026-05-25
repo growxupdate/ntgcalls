@@ -1,0 +1,78 @@
+//
+// Created by Laky64 on 29/03/2024.
+//
+
+#pragma once
+#include <wrtc/interfaces/media/tracks/media_track_interface.hpp>
+#include <wrtc/interfaces/peer_connection/peer_connection_factory.hpp>
+#include <wrtc/enums.hpp>
+#include <wrtc/models/ice_candidate.hpp>
+#include <wrtc/utils/binary.hpp>
+#include <wrtc/utils/synchronized_callback.hpp>
+#include <wrtc/interfaces/media/remote_audio_sink.hpp>
+#include <wrtc/interfaces/media/remote_video_sink.hpp>
+
+namespace wrtc {
+
+    class NetworkInterface {
+    protected:
+        PeerConnectionFactory* factory;
+        webrtc::Environment env;
+        synchronized_callback<void> dataChannelOpenedCallback;
+        synchronized_callback<IceCandidate> iceCandidateCallback;
+        synchronized_callback<ConnectionState, bool> connectionChangeCallback;
+        synchronized_callback<bytes::binary> dataChannelMessageCallback;
+        ConnectionState currentState = ConnectionState::Connecting;
+        bool dataChannelOpen = false;
+        bool alreadyConnected = false;
+        bool audioIncoming = false, cameraIncoming = false, screenIncoming = false;
+
+        static webrtc::IceCandidateInterface* parseIceCandidate(const IceCandidate& rawCandidate);
+
+    public:
+        NetworkInterface();
+
+        virtual void open() = 0;
+
+        virtual ~NetworkInterface() = default;
+
+        [[nodiscard]] SafeThread& networkThread() const;
+
+        [[nodiscard]] SafeThread& signalingThread() const;
+
+        [[nodiscard]] SafeThread& workerThread() const;
+
+        const webrtc::Environment& environment() const;
+
+        void onDataChannelOpened(const std::function<void()> &callback);
+
+        void onIceCandidate(const std::function<void(const IceCandidate& candidate)>& callback);
+
+        void onConnectionChange(const std::function<void(ConnectionState state, bool wasConnected)> &callback);
+
+        void onDataChannelMessage(const std::function<void(const bytes::binary& data)>& callback);
+
+        virtual void close();
+
+        virtual void sendDataChannelMessage(const bytes::binary &data) const = 0;
+
+        virtual void addIceCandidate(const IceCandidate& rawCandidate) const = 0;
+
+        virtual std::unique_ptr<MediaTrackInterface> addOutgoingTrack(const webrtc::scoped_refptr<webrtc::MediaStreamTrackInterface>& track) = 0;
+
+        virtual void addIncomingAudioTrack(const std::weak_ptr<RemoteAudioSink>& sink) = 0;
+
+        virtual void addIncomingVideoTrack(const std::weak_ptr<RemoteVideoSink>& sink, bool isScreenCast) = 0;
+
+        virtual ConnectionMode getConnectionMode() const = 0;
+
+        bool isDataChannelOpen() const;
+
+        ConnectionState getConnectionState() const;
+
+        virtual void enableAudioIncoming(bool enable);
+
+        virtual void enableVideoIncoming(bool enable, bool isScreenCast);
+    };
+
+} // wrtc

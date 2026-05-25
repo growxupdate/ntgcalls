@@ -1,0 +1,85 @@
+//
+// Created by Laky64 on 29/03/2024.
+//
+
+#include <wrtc/interfaces/network_interface.hpp>
+
+#include <wrtc/interfaces/peer_connection/peer_connection_factory.hpp>
+#include <wrtc/exceptions.hpp>
+
+namespace wrtc {
+    webrtc::IceCandidateInterface* NetworkInterface::parseIceCandidate(const IceCandidate& rawCandidate) {
+        webrtc::SdpParseError error;
+        const auto candidate = CreateIceCandidate(rawCandidate.mid, rawCandidate.mLine, rawCandidate.sdp, &error);
+        if (!candidate) {
+            throw wrapSdpParseError(error);
+        }
+        return candidate;
+    }
+
+    NetworkInterface::NetworkInterface(): env(PeerConnectionFactory::environment()) {
+        factory = PeerConnectionFactory::GetOrCreateDefault();
+    }
+
+    SafeThread& NetworkInterface::networkThread() const {
+        return factory->networkThread();
+    }
+
+    SafeThread& NetworkInterface::signalingThread() const {
+        return factory->signalingThread();
+    }
+
+    SafeThread& NetworkInterface::workerThread() const {
+        return factory->workerThread();
+    }
+
+    const webrtc::Environment& NetworkInterface::environment() const {
+        return env;
+    }
+
+    void NetworkInterface::onDataChannelOpened(const std::function<void()>& callback) {
+        dataChannelOpenedCallback = callback;
+    }
+
+    void NetworkInterface::onIceCandidate(const std::function<void(const IceCandidate& candidate)>& callback) {
+        iceCandidateCallback = callback;
+    }
+
+    void NetworkInterface::onConnectionChange(const std::function<void(ConnectionState state, bool wasConnected)>& callback) {
+        connectionChangeCallback = callback;
+    }
+
+    void NetworkInterface::onDataChannelMessage(const std::function<void(const bytes::binary& data)>& callback) {
+        dataChannelMessageCallback = callback;
+    }
+
+    void NetworkInterface::close() {
+        dataChannelOpenedCallback = nullptr;
+        iceCandidateCallback = nullptr;
+        connectionChangeCallback = nullptr;
+        dataChannelMessageCallback = nullptr;
+        if (factory) {
+            factory = nullptr;
+        }
+    }
+
+    bool NetworkInterface::isDataChannelOpen() const {
+        return dataChannelOpen;
+    }
+
+    ConnectionState NetworkInterface::getConnectionState() const {
+        return currentState;
+    }
+
+    void NetworkInterface::enableAudioIncoming(const bool enable) {
+        audioIncoming = enable;
+    }
+
+    void NetworkInterface::enableVideoIncoming(const bool enable, const bool isScreenCast) {
+        if (isScreenCast) {
+            screenIncoming = enable;
+        } else {
+            cameraIncoming = enable;
+        }
+    }
+} // wrtc

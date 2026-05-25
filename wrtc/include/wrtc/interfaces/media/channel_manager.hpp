@@ -1,0 +1,47 @@
+//
+// Created by Laky64 on 01/04/2024.
+//
+
+#pragma once
+#include <pc/channel.h>
+#include <media/base/media_engine.h>
+#include <wrtc/utils/safe_thread.hpp>
+
+namespace wrtc {
+    class ChannelManager {
+        const webrtc::Environment& environment;
+        webrtc::MediaEngineInterface* mediaEngine;
+        SafeThread& workerThread;
+        webrtc::Thread* signalingThread;
+        webrtc::Thread* networkThread;
+        webrtc::UniqueRandomIdGenerator ssrcGenerator;
+
+    public:
+        ChannelManager(
+            const webrtc::Environment& environment,
+            webrtc::MediaEngineInterface* mediaEngine,
+            SafeThread& workerThread,
+            webrtc::Thread* networkThread,
+            webrtc::Thread* signalingThread
+        );
+
+        std::unique_ptr<webrtc::VoiceChannel> CreateVoiceChannel(
+            webrtc::Call* call,
+            const webrtc::MediaConfig& mediaConfig,
+            const std::string& mid,
+            bool srtpRequired,
+            const webrtc::CryptoOptions& cryptoOptions,
+            const webrtc::AudioOptions& options
+        );
+
+        std::unique_ptr<webrtc::VideoChannel>  CreateVideoChannel(
+            webrtc::Call* call,
+            const webrtc::MediaConfig& mediaConfig,
+            const std::string& mid,
+            bool srtpRequired,
+            const webrtc::CryptoOptions& cryptoOptions,
+            const webrtc::VideoOptions& options,
+            webrtc::VideoBitrateAllocatorFactory* bitrateAllocatorFactory
+        );
+    };
+} // wrtc
