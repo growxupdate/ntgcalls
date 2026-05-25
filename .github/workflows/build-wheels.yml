@@ -7,10 +7,6 @@ on:
         description: "Release tag name"
         required: true
         default: "v2.2.1.1-growx1"
-      python-build:
-        description: "cibuildwheel selector. Use cp312-manylinux_x86_64 for Python 3.12, or cp3*-manylinux_x86_64 for all supported CPython builds."
-        required: true
-        default: "cp312-manylinux_x86_64"
       create-release:
         description: "Create/update GitHub Release and upload wheels"
         required: true
@@ -26,6 +22,10 @@ permissions:
 jobs:
   build-linux-x86_64-wheel:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Check out repository
@@ -33,30 +33,46 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            git \
+            curl \
+            libasound2-dev \
+            libpulse-dev
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install cibuildwheel
-        run: python -m pip install -U pip cibuildwheel
-
-      - name: Build wheel inside manylinux image
-        run: python -m cibuildwheel --output-dir wheelhouse
+      - name: Build wheel
         env:
-          CIBW_ARCHS: native
-          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.10"
-          CIBW_BUILD: ${{ github.event.inputs.python-build || 'cp312-manylinux_x86_64' }}
-          CIBW_SKIP: "*musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/pytgcalls/ntgcalls/manylinux-x86_64:latest
-          CIBW_ENVIRONMENT: "PYPI_TAGS=1"
-          CIBW_TEST_COMMAND: "python -c 'import ntgcalls; print(ntgcalls.__file__)'"
+          PYPI_TAGS: "1"
+          CMAKE_BUILD_PARALLEL_LEVEL: "2"
+          MAKEFLAGS: "-j2"
+        run: |
+          python -m pip install -U pip setuptools wheel build
+          python -m build --wheel --no-isolation
+
+      - name: Test wheel import
+        run: |
+          python -m pip install --force-reinstall --no-cache-dir dist/*.whl
+          python - <<'PY'
+          import ntgcalls
+          print(ntgcalls.__file__)
+          PY
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ntgcalls-linux-x86_64-wheels
-          path: wheelhouse/*.whl
+          name: ntgcalls-linux-x86_64-cp${{ matrix.python-version }}-wheel
+          path: dist/*.whl
           if-no-files-found: error
 
       - name: Upload wheels to GitHub Release
@@ -65,6 +81,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: "NTgCalls custom wheels ${{ github.event.inputs.tag || github.ref_name }}"
-          body: "Custom ntgcalls wheels built from ${{ github.sha }}."
+          body: "Custom ntgcalls wheels built from ${{ github.sha }}. These are linux_x86_64 wheels for Ubuntu/Render-style Linux, not manylinux/PyPI wheels. Runtime may need libasound2 and libpulse0."
           prerelease: true
-          files: wheelhouse/*.whl
+          files: dist/*.whl
