@@ -2,41 +2,69 @@ name: Build ntgcalls wheels
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag name"
+        required: true
+        default: "v2.2.1.1-growx1"
+      python-build:
+        description: "cibuildwheel selector. Use cp312-manylinux_x86_64 for Python 3.12, or cp3*-manylinux_x86_64 for all supported CPython builds."
+        required: true
+        default: "cp312-manylinux_x86_64"
+      create-release:
+        description: "Create/update GitHub Release and upload wheels"
+        required: true
+        default: true
+        type: boolean
   push:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
-  build-linux:
+  build-linux-x86_64-wheel:
     runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build pkg-config python3-dev git \
-            libasound2-dev libpulse-dev
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Build wheel
-        run: |
-          python -m pip install -U pip setuptools wheel build cmake ninja
-          python -m build --wheel
+      - name: Install cibuildwheel
+        run: python -m pip install -U pip cibuildwheel
 
-      - name: Upload wheels
+      - name: Build wheel inside manylinux image
+        run: python -m cibuildwheel --output-dir wheelhouse
+        env:
+          CIBW_ARCHS: native
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.10"
+          CIBW_BUILD: ${{ github.event.inputs.python-build || 'cp312-manylinux_x86_64' }}
+          CIBW_SKIP: "*musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/pytgcalls/ntgcalls/manylinux-x86_64:latest
+          CIBW_ENVIRONMENT: "PYPI_TAGS=1"
+          CIBW_TEST_COMMAND: "python -c 'import ntgcalls; print(ntgcalls.__file__)'"
+
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ntgcalls-wheels
-          path: dist/*.whl
+          name: ntgcalls-linux-x86_64-wheels
+          path: wheelhouse/*.whl
+          if-no-files-found: error
 
-      - name: Upload to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload wheels to GitHub Release
+        if: github.event_name == 'push' || github.event.inputs.create-release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
-
-
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: "NTgCalls custom wheels ${{ github.event.inputs.tag || github.ref_name }}"
+          body: "Custom ntgcalls wheels built from ${{ github.sha }}."
+          prerelease: true
+          files: wheelhouse/*.whl
